@@ -162,7 +162,7 @@ def handle_new_connection(s: socket.socket):
 
         request_bytes += r
 
-        if r.endswith(b"\r\n"):
+        if r.endswith(b"\r\n\r\n"):
             break
 
     request: str = request_bytes.decode(iso_standard, errors="replace")
