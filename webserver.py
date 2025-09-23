@@ -1,6 +1,8 @@
 import os
 import sys 
 import socket
+from html import escape
+from urllib.parse import quote
 
 iso_standard: str = "ISO-8859-1"
 default_port: int = 21500
@@ -25,7 +27,13 @@ RESPONSE_405: bytes = (
 )
 
 valid_methods: list[str] = ["GET"]
-ext_to_content_type: dict[str, str] = {".txt": "text/plain", ".html": "text/html"}
+ext_to_content_type: dict[str, str] = {
+        ".txt": "text/plain",
+        ".htm": "text/html",
+        ".html": "text/html",
+        ".jpg": "image/jpeg",
+        ".jpeg": "image/jpeg",
+     }
 
 def set_target_port() -> int:
     target_port: int = default_port
@@ -41,6 +49,52 @@ def set_target_port() -> int:
             print(f"Invalid port specified, using default {default_port}")
 
     return default_port
+
+def build_directory_listing_html() -> bytes:
+    entries = []
+    print("No file was specified '/', building directory entries.")
+    try:
+        for name in sorted(os.listdir()):
+            full = os.path.join(".", name)
+            if os.path.isfile(full):
+                ext = os.path.splitext(name)[1]
+                if ext in ext_to_content_type:
+                    safe_text = escape(name)
+                    safe_href = "/" + quote(name)
+                    entries.append(f'<li><a href="{safe_href}">{safe_text}</a></li>')
+    except Exception as e:
+        msg = escape(f"Error reading directory: {e}")
+        html = f"<!doctype html><meta charset={iso_standard}><h1>Directory</h1><p>{msg}</p>"
+        body = html.encode(iso_standard)
+        header = (
+            f"HTTP/1.1 500 Internal Server Error\r\n"
+            f"Content-Type: text/html; charset={iso_standard}\r\n"
+            f"Content-Length: {len(body)}\r\n"
+            f"Connection: close\r\n\r\n"
+        ).encode(iso_standard)
+        return header + body
+
+    print(f"Showing directory files: {entries}")
+
+    html = (
+        "<!doctype html>"
+        f"<meta charset={iso_standard}>"
+        "<title>Directory listing</title>"
+        "<h1>Directory listing</h1>"
+        "<ul>"
+        + ("\n".join(entries) if entries else "<li><em>(no servable files)</em></li>")
+        + "</ul>"
+    )
+
+    body = html.encode(iso_standard)
+    header = (
+        f"HTTP/1.1 200 OK\r\n"
+        f"Content-Type: text/html; charset={iso_standard}\r\n"
+        f"Content-Length: {len(body)}\r\n"
+        f"Connection: close\r\n"
+        f"\r\n"
+    ).encode(iso_standard)
+    return header + body
 
 def sanitize_uri(uri: str) -> str:
     # For now, only handle files from the directory the webserver is running in.
@@ -63,12 +117,16 @@ def read_file_bytes(filepath: str) -> bytes | None:
 
 def build_response_for_req(request: str) -> bytes:
     request_line: str = request.split("\r\n")[0]
-    method, uri, _ = request_line.split(" ") # HTTP version unused currently
+    method, uri, http_version = request_line.split(" ") # HTTP version unused currently
 
     if method not in valid_methods:
         return RESPONSE_405
 
     safe_uri: str = sanitize_uri(uri)
+
+    if safe_uri == "/":
+        return build_directory_listing_html()
+
     ext = os.path.splitext(safe_uri)[1]
 
     if ext not in ext_to_content_type:
