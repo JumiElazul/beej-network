@@ -7,9 +7,7 @@ WORD_LEN_SIZE = 2
 def usage():
     print("usage: wordclient.py server port", file=sys.stderr)
 
-packet_buffer = b''
-
-def get_next_word_packet(s):
+def get_next_word_packet(s: socket.socket):
     """
     Return the next word packet from the stream.
 
@@ -20,12 +18,25 @@ def get_next_word_packet(s):
     up.
     """
 
-    global packet_buffer
+    packet_buffer: bytes = b""
 
-    # TODO -- Write me!
+    while len(packet_buffer) < 2:
+        packet_buffer += s.recv(2)
+        if not packet_buffer:
+            return None
 
+    length: int = int.from_bytes(packet_buffer, "big")
+    full_packet_length: int = length + 2
 
-def extract_word(word_packet):
+    while len(packet_buffer) < full_packet_length:
+        packet_buffer += s.recv(length)
+
+        if not packet_buffer:
+            raise Exception("Invalid number of bytes were sent.")
+
+    return packet_buffer
+
+def extract_word(word_packet: bytes) -> str:
     """
     Extract a word from a word packet.
 
@@ -35,9 +46,7 @@ def extract_word(word_packet):
     Returns the word decoded as a string.
     """
 
-    # TODO -- Write me!
-
-# Do not modify:
+    return word_packet[2:].decode()
 
 def main(argv):
     try:
