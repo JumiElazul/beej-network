@@ -6,6 +6,7 @@ from urllib.parse import quote
 
 iso_standard: str = "ISO-8859-1"
 default_port: int = 21500
+min_port: int = 1025
 max_port: int = 65535
 
 RESPONSE_404: bytes = (
@@ -41,7 +42,7 @@ def set_target_port() -> int:
         try:
             target_port = int(sys.argv[1])
 
-            if target_port < 1025 or target_port > max_port:
+            if target_port < min_port or target_port > max_port:
                 raise
             
             return target_port
