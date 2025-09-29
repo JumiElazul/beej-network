@@ -11,12 +11,14 @@ def usage(argc: int):
         print("<target_port> default to 80 if unspecified.")
         exit(1)
 
-def build_request(url: str) -> bytes:
+def build_request(url: str, payload: str) -> bytes:
     return (
         "GET / HTTP/1.1\r\n"
         f"Host: {url}\r\n"
+        f"Content-Length: {len(payload)}\r\n"
         "Connection: close\r\n"
         "\r\n"
+        f"{payload}"
     ).encode(iso_std)
 
 def main(argc: int, argv: list[str]):
@@ -33,13 +35,15 @@ def main(argc: int, argv: list[str]):
             target_port = int(argv[2])
         except ValueError:
             print("<target_port> could not be converted to a port number; invalid format.  Using default port.")
+    if argc > 3:
+        payload = argv[3]
 
     with socket.socket() as s:
         s.settimeout(4.0)
         print(f"Connecting to {target_url} on port {target_port}...")
         s.connect((target_url, target_port))
 
-        request: bytes = build_request(target_url)
+        request: bytes = build_request(target_url, payload)
         s.sendall(request)
 
         received: bytes = b""
