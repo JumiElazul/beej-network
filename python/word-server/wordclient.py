@@ -23,6 +23,11 @@ def get_next_word_packet(s: socket.socket, recv_amnt: int) -> bytes | None:
     global packet_buffer
 
     def fill_buffer(need: int) -> bool:
+        """
+        Attemps to fill the global packet_buffer with 'need' bytes.
+
+        Returns True if it was successful, otherwise False.
+        """
         global packet_buffer
 
         while len(packet_buffer) < need:
