@@ -1,106 +1,54 @@
-import heapq
 import sys
 import json
 import math  # If you want to use math.inf for infinity
+from typing import Optional
 
-def ipv4_to_value(ipv4_addr: str) -> int:
-    split: list[str] = ipv4_addr.split(".")
-    nums: list[int] = [int(x) for x in split]
-    return (nums[0] << 24) | (nums[1] << 16) | (nums[2] << 8) | nums[3]
+def get_subnet_mask_from_slash(slash: str) -> int:
+    n = int(slash.split("/")[-1])
+    return ((1 << n) - 1) << (32 - n)
 
-def value_to_ipv4(addr: int) -> str:
-    nums: list[str] = []
-    nums.append(str((addr >> 24) & 0xFF))
-    nums.append(str((addr >> 16) & 0xFF))
-    nums.append(str((addr >> 8)  & 0xFF))
-    nums.append(str((addr >> 0)  & 0xFF))
-    return ".".join(nums)
+def ipv4_to_value(ip: str) -> int:
+    split: list[str] = ip.split(".")
+    octets: list[int] = [int(n) for n in split]
 
-def get_subnet_mask_value(slash: str) -> int:
-    ntwk_bits: int = int(slash.split("/")[1])
-    host_bits: int = 32 - ntwk_bits
+    return (octets[0] << 24) | (octets[1] << 16) | (octets[2] << 8) | octets[3]
 
-    return ((1 << ntwk_bits) - 1) << host_bits
+def is_same_subnet(ip1: str, ip2: str, slash: str) -> bool:
+    subnet_mask: int = get_subnet_mask_from_slash(slash)
 
-def ips_same_subnet(ip1: str, ip2: str, slash: str) -> bool:
     ip1_val: int = ipv4_to_value(ip1)
     ip2_val: int = ipv4_to_value(ip2)
-    subnet_mask: int = get_subnet_mask_value(slash)
 
-    netwk1: int = ip1_val & subnet_mask
-    netwk2: int = ip2_val & subnet_mask
-    return netwk1 == netwk2
+    return (ip1_val & subnet_mask) == (ip2_val & subnet_mask)
 
-def get_network(ip_value: int, netmask: int) -> int:
-    return ip_value & netmask
+def value_to_ipv4(value: int) -> str:
+    value &= 0xFFFFFFFF
+    return ".".join(str((value >> shift) & 0xFF) for shift in (24, 16, 8, 0))
 
-def find_router_for_ip(routers, ip):
+def find_start_router(routers: dict[str, dict], src_ip: str) -> Optional[str]:
     for router_ip, data in routers.items():
-        slash = data.get("netmask", "/24")
-        if ips_same_subnet(ip, router_ip, slash):
+        subnet_mask: str = data.get("netmask", "/24")
+        if is_same_subnet(router_ip, src_ip, subnet_mask):
             return router_ip
+    return None 
 
-    return None
+def init_dijkstra(routers: dict[str, dict], src_ip: str):
+    nodes: set[str] = set(routers.keys())
+    distances: dict[str, float] = {node: math.inf for node in nodes}
+    parents: dict[str, Optional[str]] = {node: None for node in nodes}
+    to_visit: set[str] = set(nodes)
 
-def build_graph(routers: dict[str, dict]) -> dict[str, dict[str, int]]:
-    graph: dict[str, dict[str, int]] = {}
-    for router, info in routers.items():
-        graph.setdefault(router, {})
-        connections = info.get("connections", {})
-        for vertex, edge in connections.items():
-            ad = int(edge.get("ad", 1))
-            graph[router][vertex] = ad
+    start: Optional[str] = find_start_router(routers, src_ip)
+    if start is None:
+        raise ValueError(f"No router found on the same subnet as {src_ip}")
 
-    return graph
+    distances[start] = 0.0
+    return to_visit, distances, parents, start
 
-def reconstruct_path(prev: dict[str, str | None], start: str, goal: str) -> list[str]:
-    path: list[str] = []
-    cur = goal
+def build_path(parents: dict[str, Optional[str]], start: str, dest: str) -> list[str]:
+    pass
 
-    if cur not in prev and cur != start:
-        return []
-
-    while cur is not None:
-        path.append(cur)
-        if cur == start:
-            break
-        cur = prev.get(cur)
-
-    path.reverse()
-    return path
-
-def routers_shortest_path(graph: dict[str, dict[str, int]], start: str, goal: str) -> list[str]:
-    if start == goal:
-        return [start]
-
-    dist: dict[str, int] = {start: 0}
-    prev: dict[str, str | None] = {start: None}
-    pq: list[tuple[int, str]] = [(0, start)]
-    visited: set[str] = set()
-
-    while pq:
-        dis, curr = heapq.heappop(pq)
-        if curr in visited:
-            continue
-
-        visited.add(curr)
-
-        if curr == goal:
-            return reconstruct_path(prev, start, goal)
-
-        for vertex, weight in graph.get(curr, {}).items():
-            if vertex in visited:
-                continue
-
-            new_dist = dis + weight
-            if new_dist < dist.get(vertex, math.inf):
-                dist[vertex] = new_dist
-                prev[vertex] = curr
-                heapq.heappush(pq, (new_dist, vertex))
-
-    return []
-
-def dijkstras_shortest_path(routers, src_ip, dest_ip):
+def dijkstras_shortest_path(routers: dict[str, dict], src_ip, dest_ip):
     """
     This function takes a dictionary representing the network, a source
     IP, and a destination IP, and returns a list with all the routers
@@ -154,22 +102,26 @@ def dijkstras_shortest_path(routers, src_ip, dest_ip):
     for madness.
     """
 
-    src_router = find_router_for_ip(routers, src_ip)
-    dest_router = find_router_for_ip(routers, dest_ip)
+    to_visit, distances, parents, start = init_dijkstra(routers, src_ip)
 
-    if src_router is None or dest_router is None:
-        return None
+    while to_visit:
+        current_node = min(to_visit, key=lambda n: distances[n])
+        to_visit.remove(current_node)
 
-    if src_router == dest_router:
-        return []
+        edges = routers.get(current_node, {}).get("connections", {})
 
-    graph = build_graph(routers)
-    path_including_endpoints = routers_shortest_path(graph, src_router, dest_router)
+        for neighbor, link in edges.items():
+            if neighbor not in distances:
+                continue
+            if neighbor not in to_visit:
+                continue
 
-    if not path_including_endpoints:
-        return []
+            weight = link.get("ad", 1)
+            alt = distances[current_node] + weight
 
-    return path_including_endpoints
+            if alt < distances[neighbor]:
+                distances[neighbor] = alt
+                parents[neighbor] = current_node
 
 #------------------------------
 # DO NOT MODIFY BELOW THIS LINE
@@ -183,17 +135,17 @@ def read_routers(file_name):
 def find_routes(routers, src_dest_pairs):
     for src_ip, dest_ip in src_dest_pairs:
         path = dijkstras_shortest_path(routers, src_ip, dest_ip)
-        print(f"{src_ip:>15s} -> {dest_ip:<15s}  {repr(path)}")
+        # print(f"{src_ip:>15s} -> {dest_ip:<15s}  {repr(path)}")
 
-def main():
-    json_data = read_routers("example1.json")
+def main(argv):
+    router_file_name: str = "example1.json"
+    json_data = read_routers(router_file_name)
 
     routers = json_data["routers"]
     routes = json_data["src-dest"]
 
     find_routes(routers, routes)
-    return 0
 
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(main(sys.argv))
     
