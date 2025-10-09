@@ -129,7 +129,7 @@ def dijkstras_shortest_path(routers: dict[str, dict], src_ip, dest_ip):
 
     while curr is not None and curr != start:
         path.append(curr)
-        curr = parents[curr]  # Optional[str]
+        curr = parents[curr]
 
     if curr != start:
         path = []
