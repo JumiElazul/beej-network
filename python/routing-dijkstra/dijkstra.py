@@ -45,9 +45,6 @@ def init_dijkstra(routers: dict[str, dict], src_ip: str):
     distances[start] = 0.0
     return to_visit, distances, parents, start
 
-def build_path(parents: dict[str, Optional[str]], start: str, dest: str) -> list[str]:
-    pass
-
 def dijkstras_shortest_path(routers: dict[str, dict], src_ip, dest_ip):
     """
     This function takes a dictionary representing the network, a source
@@ -105,7 +102,7 @@ def dijkstras_shortest_path(routers: dict[str, dict], src_ip, dest_ip):
     to_visit, distances, parents, start = init_dijkstra(routers, src_ip)
 
     while to_visit:
-        current_node = min(to_visit, key=lambda n: distances[n])
+        current_node: str = min(to_visit, key=lambda n: distances[n])
         to_visit.remove(current_node)
 
         edges = routers.get(current_node, {}).get("connections", {})
@@ -122,6 +119,26 @@ def dijkstras_shortest_path(routers: dict[str, dict], src_ip, dest_ip):
             if alt < distances[neighbor]:
                 distances[neighbor] = alt
                 parents[neighbor] = current_node
+
+    
+    path: list[str] = []
+    dest_router = find_start_router(routers, dest_ip)
+
+    path: list[str] = []
+    curr: Optional[str] = dest_router
+
+    while curr is not None and curr != start:
+        path.append(curr)
+        curr = parents[curr]  # Optional[str]
+
+    if curr != start:
+        path = []
+
+    if len(path) > 0:
+        path.append(start)
+        path.reverse()
+
+    print(f"{src_ip} -> {dest_ip}   {path}")
 
 #------------------------------
 # DO NOT MODIFY BELOW THIS LINE
