@@ -2,50 +2,49 @@ import sys
 import socket
 import select
 
-def usage():
-    print("usage: chat-server <port>")
+listener: socket.socket
 
-def add_socket(active_sockets: set[socket.socket], s: socket.socket):
-    active_sockets.add(s)
-    print(f"Added socket {s.getpeername()} to active sockets set (currently {len(active_sockets)} active sockets).")
+class User():
+    def __init__(self, nickname: str, socket: socket.socket):
+        self.nickname = nickname
+        self.socket = socket
 
-def remove_socket(active_sockets: set[socket.socket], s: socket.socket):
-    active_sockets.remove(s)
-    print(f"Removed socket {s.getpeername()} from active sockets set (currently {len(active_sockets)} active sockets).")
+    def __str__(self):
+        return self.nickname
 
-def main(argc: int, argv: list[str]):
+def parse_args(argv: list[str]):
     try:
-        port: int = int(argv[1])
+        port: int = int(argv[3])
+        return port
     except:
-        usage()
+        print(f"Could not parse arguments passed to client: {argv}", file=sys.stderr)
         sys.exit(1)
 
+def create_listener_socket(port: int):
     listener: socket.socket = socket.socket()
     listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     listener.bind(('', port))
     listener.listen()
 
-    active_sockets: set[socket.socket] = set()
-    active_sockets.add(listener)
-
     print(f"chat-server listening on port {port}...")
+    return listener
 
-    try:
-        while True:
-            ready_sockets, _, _ = select.select(active_sockets, [], [])
+def run_server_loop(active_users: set[User]):
+    while True:
+        sockets: list[socket.socket] = [user.socket for user in active_users]
+        ready_to_read, _, _ = select.select(sockets, [], [])
 
-            for ready in ready_sockets:
-                if ready is listener:
-                    new_socket: socket.socket = listener.accept()[0]
-                    add_socket(active_sockets, new_socket);
-                else:
-                    received: bytes = ready.recv(256)
-                    print(received.decode())
+        for s in ready_to_read:
+            pass
 
-    except KeyboardInterrupt:
-        print("KeyboardInterrupt detected, stopping server...")
+def main(argv: list[str]):
+    port: int = parse_args(argv)
+    active_users: set[User] = set()
 
-    listener.close()
+    listener = create_listener_socket(port)
+    active_users.add(User("", listener))
+
+    run_server_loop(active_users)
 
 if __name__ == "__main__":
-    main(len(sys.argv), sys.argv)
+    main(sys.argv)

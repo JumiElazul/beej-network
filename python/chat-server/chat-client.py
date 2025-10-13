@@ -5,53 +5,56 @@ import sys
 
 from chatui import init_windows, read_command, print_message, end_windows
 
-def window_output(s: socket.socket):
-    while True:
-        b: bytes = s.recv(256)
-
-        if len(b) > 0:
-            print_message(b.decode())
-
 def usage():
-    print("usage: chat-client <nickname> <server_address> <port>")
+    print("usage: python3 chat-client <nickname> <server_name> <port>", file=sys.stderr)
+    sys.exit(1)
 
-def main(argc: int, argv: list[str]):
+def parse_args(argv: list[str]):
     try:
         nickname: str = argv[1]
         server: str = argv[2]
         port: int = int(argv[3])
-    except (IndexError, ValueError):
-        usage()
+        return nickname, server, port
+    except:
+        print(f"Could not parse arguments passed to client: {argv}", file=sys.stderr)
         sys.exit(1)
 
-    with socket.socket() as s:
+def runner():
+    count = 0
+
+    while True:
+        time.sleep(2)
+        print_message(f"*** Runner count: {count}")
+        count += 1
+
+def create_socket_and_connect(server: str, port: int):
+    try:
+        s: socket.socket = socket.socket()
         s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        s.connect((server, port))
+        return s
+    except:
+        print(f"Could not connect to ({server}:{port}).", file=sys.stderr)
+        sys.exit(1)
 
+def main(argv: list[str]):
+    nickname, server, port = parse_args(argv)
+    s: socket.socket = create_socket_and_connect(server, port)
+
+    init_windows()
+
+    t1 = threading.Thread(target=runner, daemon=True)
+    t1.start()
+
+    while True:
         try:
-            s.connect((server, port))
-        except ConnectionRefusedError:
-            print(f"Connection to {server} on port {port} could not be established.")
-            sys.exit(1)
+            command = read_command("Enter a thing> ")
+        except:
+            break
 
-        print(f"Connected to {server} on port {port}...")
+        print_message(f">>> {command}")
 
-        init_windows()
-
-        window_thread = threading.Thread(target=window_output, args={s}, daemon=True)
-        window_thread.start()
-
-        while True:
-            try:
-                command = read_command(f"{nickname}> ")
-            except KeyboardInterrupt:
-                print("KeyboardInterrupt")
-                break
-            except:
-                break
-
-            s.sendall(command.encode())
-
-        end_windows()
+    end_windows()
 
 if __name__ == "__main__":
-    main(len(sys.argv), sys.argv)
+    main(sys.argv)
