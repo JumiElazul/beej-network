@@ -11,6 +11,7 @@ class PacketType(Enum):
     DM      = 4
     COMMAND = 5
     ERROR   = 6
+    ABORT   = 7
 
 
 class Packet:

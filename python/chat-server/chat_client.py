@@ -26,7 +26,7 @@ def listen_server(server: socket.socket):
 
         print_message(pkt.payload)
 
-        if pkt.type is PacketType.ERROR:
+        if pkt.type is PacketType.ABORT:
             os._exit(1)
 
 

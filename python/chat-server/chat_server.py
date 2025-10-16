@@ -123,12 +123,7 @@ def handle_packet(user: User, pkt: Packet):
 
         case PacketType.DM:
             payload = pkt.payload.strip()
-            parts = payload.split(None, 1)
-
-            if len(parts) < 2:
-                send_error_to(user, "Usage: /dm <username> <message>")
-                return
-
+            parts = payload.split(" ", 1)
             target_name, message_body = parts[0], parts[1]
             target_user = find_user_by_name(target_name)
 
