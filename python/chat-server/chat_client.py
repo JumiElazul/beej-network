@@ -7,6 +7,7 @@ from packet import *
 from chatui import init_windows, read_command, print_message, end_windows
 
 server_socket: socket.socket
+running: bool = True
 
 def listen_server(server: socket.socket):
     buf = bytearray()
@@ -65,6 +66,7 @@ def handle_help():
     print_message("/users                : lists all users currently connected.")
     print_message("/me                   : emote command.  ex. /em does a dance -> [user does a dance]")
     print_message("/dm <username> <text> : direct messages <text> to <name>")
+    print_message("/q                    : quit the application")
 
 
 def handle_users():
@@ -98,13 +100,18 @@ def handle_whisper(command: str):
     send_packet(server_socket, pm_pkt)
 
 
+def handle_quit():
+    global running
+    running = False
+
+
 def handle_non_chat_commands(command: str):
     split: list[str] = command.split(" ")
     command = split[0]
     rest = " ".join(split[1:])
 
     match command:
-        case "/help":
+        case "/help" | "/h":
             handle_help()
         case "/users":
             handle_users()
@@ -112,6 +119,8 @@ def handle_non_chat_commands(command: str):
             handle_emote(rest)
         case "/dm":
             handle_whisper(rest)
+        case "/q":
+            handle_quit()
         case _:
             print_message(f"command {command} not recognized.")
 
@@ -135,7 +144,7 @@ def main(argv: list[str]):
 
     server_socket: socket.socket = start_client(username, server_addr, port)
 
-    while True:
+    while running:
         try:
             command: str = read_command(f"{username}> ")
         except:
