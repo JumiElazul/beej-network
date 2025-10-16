@@ -8,7 +8,9 @@ class PacketType(Enum):
     GOODBYE = 1
     CHAT    = 2
     EMOTE   = 3
-    ERROR   = 4
+    DM      = 4
+    COMMAND = 5
+    ERROR   = 6
 
 
 class Packet:

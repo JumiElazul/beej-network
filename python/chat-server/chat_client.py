@@ -1,6 +1,6 @@
 import threading
-import time
 import sys
+import os
 import socket
 from packet import *
 
@@ -26,6 +26,9 @@ def listen_server(server: socket.socket):
 
         print_message(pkt.payload)
 
+        if pkt.type is PacketType.ERROR:
+            os._exit(1)
+
 
 def start_client(username: str, server_addr: str, port: int) -> socket.socket:
     global server_socket
@@ -40,7 +43,7 @@ def start_client(username: str, server_addr: str, port: int) -> socket.socket:
 
     init_windows()
 
-    server_thread = threading.Thread(target=listen_server, args=(server_socket,), daemon=True)
+    server_thread = threading.Thread(target=listen_server, args=[server_socket], daemon=True)
     server_thread.start()
 
     pkt: Packet = Packet(PacketType.HELLO, username)
@@ -56,15 +59,61 @@ def end_client(server: socket.socket):
     server.close()
 
 
+def handle_help():
+    print_message("== help menu ==")
+    print_message("/help                 : help menu.  you're here.")
+    print_message("/users                : lists all users currently connected.")
+    print_message("/me                   : emote command.  ex. /em does a dance -> [user does a dance]")
+    print_message("/dm <username> <text> : direct messages <text> to <name>")
+
+
+def handle_users():
+    pkt: Packet = Packet(PacketType.COMMAND, "users")
+    send_packet(server_socket, pkt)
+
+
+def handle_emote(emote_text: str):
+    if not emote_text:
+        return
+
+    emote_pkt = Packet(PacketType.EMOTE, emote_text)
+    send_packet(server_socket, emote_pkt)
+
+
+def handle_whisper(command: str):
+    parts = command.split(None, 1)
+
+    if len(parts) < 2:
+        print_message("usage: /dm <username> <message>")
+        return
+
+    target, message = parts[0].strip(), parts[1].strip()
+
+    if not target or not message:
+        print_message("Usage: /dm <username> <message>")
+        return
+
+    pm_payload = f"{target} {message}"
+    pm_pkt = Packet(PacketType.DM, pm_payload)
+    send_packet(server_socket, pm_pkt)
+
+
 def handle_non_chat_commands(command: str):
-    if command.startswith("/me "):
-        emote_text = command[4:].strip()
+    split: list[str] = command.split(" ")
+    command = split[0]
+    rest = " ".join(split[1:])
 
-        if not emote_text:
-            return
-
-        emote_pkt = Packet(PacketType.EMOTE, emote_text)
-        send_packet(server_socket, emote_pkt)
+    match command:
+        case "/help":
+            handle_help()
+        case "/users":
+            handle_users()
+        case "/me":
+            handle_emote(rest)
+        case "/dm":
+            handle_whisper(rest)
+        case _:
+            print_message(f"command {command} not recognized.")
 
 
 def handle_command(command: str):
