@@ -1,7 +1,9 @@
 #include <asio.hpp>
 #include <ctime>
-#include <iostream>
-#include <string>
+#include <print>
+#include <set>
+
+using asio::ip::tcp;
 
 std::string make_daytime_string() {
     using namespace std;
@@ -9,59 +11,94 @@ std::string make_daytime_string() {
     return ctime(&now);
 }
 
-class validated_port {
+class tcp_connection : public std::enable_shared_from_this<tcp_connection> {
 public:
-    explicit validated_port(const std::string& port_str) {
-        long temp = 0;
-        auto begin = port_str.data();
-        auto end = port_str.data() + port_str.size();
-        auto result = std::from_chars(begin, end, temp);
+    using pointer = std::shared_ptr<tcp_connection>;
 
-        if (result.ec != std::errc{} || result.ptr != end) {
-            throw std::invalid_argument("Port string is not a valid integer: '" + port_str + "'");
-        }
-
-        if (temp < 1025 || temp > static_cast<long>(std::numeric_limits<unsigned short>::max())) {
-            throw std::out_of_range("Port specified was out of range: " + port_str);
-        }
-
-        _port = static_cast<unsigned short>(temp);
+    static pointer create(asio::io_context& io_context) {
+        return pointer(new tcp_connection(io_context));
     }
 
-    operator asio::ip::port_type() const noexcept { return _port; }
+    tcp::socket& socket() { return _socket; }
+
+    void start() {
+        _message = make_daytime_string();
+
+        asio::async_write(_socket, asio::buffer(_message),
+                          [self = shared_from_this()](const asio::error_code& err_code,
+                                                      size_t bytes_transferred) {
+                              self->handle_write_completion(err_code, bytes_transferred);
+                          });
+    }
 
 private:
-    unsigned short _port = 0;
+    tcp::socket _socket;
+    std::string _message;
+
+    tcp_connection(asio::io_context& io_context)
+        : _socket(io_context) {}
+
+    void handle_write_completion(const asio::error_code& err_code, size_t bytes_transferred) {
+        if (err_code) {
+            std::println(stderr, "Error on async_write: {}", err_code.message());
+            return;
+        }
+    }
+};
+
+class tcp_server {
+public:
+    tcp_server(asio::io_context& io_context, unsigned short port)
+        : _context(io_context)
+        , _acceptor(io_context, tcp::endpoint(tcp::v4(), port))
+        , _port(port)
+        , _active_connections() {
+        std::println("Server listening on port {}...", _port);
+        start_accept();
+    }
+
+private:
+    asio::io_context& _context;
+    tcp::acceptor _acceptor;
+    unsigned short _port;
+
+    std::set<tcp_connection::pointer> _active_connections;
+
+    void start_accept() {
+        tcp_connection::pointer new_conn = tcp_connection::create(_context);
+
+        _acceptor.async_accept(new_conn->socket(), [this, new_conn](const asio::error_code& ec) {
+            handle_new_connection_completion(new_conn, ec);
+        });
+    }
+
+    void handle_new_connection_completion(tcp_connection::pointer new_connection,
+                                          const std::error_code& error) {
+        if (!error) {
+            new_connection->start();
+        }
+
+        // _active_connections.insert(new_connection);
+        // std::string addr = new_connection->socket().remote_endpoint().address().to_string();
+        // std::println("New connection address {} added to active connections (total active: {})",
+        //              addr, _active_connections.size());
+        start_accept();
+    }
 };
 
 int main(int argc, char** argv) {
-    if (argc != 2) {
-        std::cerr << "usage: chat-server <port>\n";
-        std::exit(1);
-    }
-
     try {
-        std::string port_str = argv[1];
-        validated_port port = validated_port(port_str);
+        unsigned short port = 12345;
+
+        if (argc >= 2) {
+            port = static_cast<unsigned short>(std::stoi(argv[1]));
+        }
 
         asio::io_context io_context;
-
-        asio::ip::tcp::acceptor acceptor(io_context,
-                                         asio::ip::tcp::endpoint(asio::ip::tcp::v4(), port));
-
-        std::cout << "chat-server listening on port " << port << "...\n";
-
-        while (true) {
-            asio::ip::tcp::socket socket(io_context);
-            acceptor.accept(socket);
-
-            std::string message = make_daytime_string();
-
-            std::error_code ignored_error;
-            asio::write(socket, asio::buffer(message), ignored_error);
-        }
+        tcp_server server(io_context, port);
+        io_context.run();
     } catch (std::exception& e) {
-        std::cerr << e.what() << std::endl;
+        std::println(stderr, "{}", e.what());
     }
 
     return 0;
