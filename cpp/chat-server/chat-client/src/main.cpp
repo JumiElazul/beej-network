@@ -4,6 +4,8 @@
 
 using asio::ip::tcp;
 
+static constexpr size_t MAX_MESSAGE_SIZE = 1024;
+
 int main(int argc, char* argv[]) {
     try {
         if (argc != 3) {
@@ -20,7 +22,7 @@ int main(int argc, char* argv[]) {
         asio::connect(socket, endpoints);
 
         while (true) {
-            std::array<char, 128> buf;
+            std::array<char, MAX_MESSAGE_SIZE> buf;
             std::error_code error;
 
             size_t len = socket.read_some(asio::buffer(buf), error);
@@ -30,7 +32,11 @@ int main(int argc, char* argv[]) {
             else if (error)
                 throw asio::system_error(error);
 
-            std::cout.write(buf.data(), len);
+            std::cout.write(buf.data(), static_cast<std::streamsize>(len));
+
+            std::string line;
+            std::getline(std::cin, line);
+            asio::write(socket, asio::buffer(line));
         }
     } catch (std::exception& e) {
         std::cerr << e.what() << std::endl;

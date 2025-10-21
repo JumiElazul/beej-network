@@ -20,20 +20,36 @@ void tcp_connection::begin_listen_loop() {
 
 void tcp_connection::handle_read(const asio::error_code& err_code, std::size_t bytes_transferred) {
     if (err_code) {
-        std::println(stderr, "Error on async_read_some: {}", err_code.message());
+        if (err_code == asio::error::eof) {
+            std::println("Connection closed by peer.");
+        } else {
+            std::println(stderr, "Error on async_read_some: {}", err_code.message());
+        }
         return;
     }
 
     std::string received(_read_buffer.data(), bytes_transferred);
+    std::println("Received '{}' from {}", received,
+                 _socket.remote_endpoint().address().to_string());
     handle_write(received);
 }
 
 void tcp_connection::handle_write(const std::string& message) {
+    if (message.size() > MAX_MESSAGE_SIZE - 1) {
+        // Reject messages that are too big for the write queue.
+        std::println("Message was too big for write_buffer (size {}, max {}).", message.size() + 1,
+                     MAX_MESSAGE_SIZE);
+        begin_listen_loop();
+        return;
+    }
+
     std::copy_n(message.begin(), message.size(), _write_buffer.begin());
-    std::copy_n("\n", 1, _write_buffer.begin() + message.size());
+    _write_buffer[message.size()] = '\n';
+
+    size_t write_length = message.size() + 1;
 
     asio::async_write(
-        _socket, asio::buffer(_write_buffer),
+        _socket, asio::buffer(_write_buffer.data(), write_length),
         [self = shared_from_this()](const asio::error_code& err_code, size_t bytes_transferred) {
             self->handle_write_complete(err_code, bytes_transferred);
         });

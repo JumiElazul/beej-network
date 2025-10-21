@@ -9,6 +9,8 @@
 using asio::ip::tcp;
 
 class tcp_connection : public std::enable_shared_from_this<tcp_connection> {
+    static constexpr size_t MAX_MESSAGE_SIZE = 1024;
+
 public:
     using pointer = std::shared_ptr<tcp_connection>;
 
@@ -18,10 +20,10 @@ public:
 
 private:
     tcp::socket _socket;
-    std::string _entry_message = "Connected to Server.";
+    std::string _entry_message = "Connected to server.";
 
-    std::array<char, 32> _read_buffer{};
-    std::array<char, 32> _write_buffer{};
+    std::array<char, MAX_MESSAGE_SIZE> _read_buffer{};
+    std::array<char, MAX_MESSAGE_SIZE> _write_buffer{};
 
     tcp_connection(asio::io_context& io_context);
 
